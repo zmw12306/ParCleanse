@@ -1,0 +1,204 @@
+Example 1:
+###### Given the description for Route Request:
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|    Type = 9   |    Length     |      AE       |     Plen      |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|      Prefix...
++-+-+-+-+-+-+-+-+-+-+-+-
+A Route Request TLV prompts the receiver to send an update for a given prefix, or a full route table dump.
+
+Fields:
+
+Type
+Set to 9 to indicate a Route Request TLV.
+Length
+The length of the body in octets, exclusive of the Type and Length fields.
+AE
+The encoding of the Prefix field. The value 0 specifies that this is a request for a full route table dump (a wildcard request).
+Plen
+The length in bits of the requested prefix.
+Prefix
+The prefix being requested. This field's size is Plen/8 rounded upwards.
+A Request TLV prompts the receiver to send an update message (possibly a retraction) for the prefix specified by the AE, Plen, and Prefix fields, or a full dump of its route table if AE is 0 (in which case Plen must be 0 and Prefix is of length 0). A Request TLV with AE set to 0 and Plen not set to 0 MUST be ignored.
+
+This TLV is self-terminating and allows sub-TLVs.
+
+#### Expected output:
+typedef struct _SubTLV{
+  UINT8BE byte;
+} SubTLV; //placeholder
+
+entrypoint typedef struct _RouteRequest {
+  UINT8BE Type{Type == 9};
+  UINT8BE Length;
+  UINT8BE AE{ AE == 1 || AE == 2 || AE == 3 || AE == 0 };
+  UINT8BE Plen { (AE != 0 || Plen == 0) && (Plen <= 255 - 7) && Length >= (Plen + 7) / 8 + 2};
+  UINT8BE Prefix[:byte-size ((Plen + 7) / 8)];
+  SubTLV subtlvs[:byte-size (Length - (2 + (Plen + 7) / 8))];//This TLV allows sub-TLVs. the length is use Length to substract the length of AE(1byte), Plen(1byte), Prefix
+} RouteRequest;
+
+Example 2:
+###### Given the description for Route Request:
+Sub-TLV Format
+   Every TLV carries an explicit length in its header; however, most
+   TLVs are self-terminating, in the sense that it is possible to
+   determine the length of the body without reference to the explicit
+   Length field.  If a TLV has a self-terminating format, then the space
+   between the natural size of the TLV and the size announced in the
+   Length field may be used to store a sequence of sub-TLVs.
+   Sub-TLVs have the same structure as TLVs.  With the exception of
+   Pad1, all TLVs have the following structure:
+    0                   1                   2                   3
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |     Type      |    Length     |     Body...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+   Fields:
+   Type      The type of the sub-TLV.
+   Length    The length of the body in octets, exclusive of the Type and
+             Length fields.
+   Body      The sub-TLV body, the interpretation of which depends on
+             both the type of the sub-TLV and the type of the TLV within
+             which it is embedded.
+   The most significant bit of the sub-TLV type (the bit with value 80
+   hexadecimal), is called the mandatory bit; in other words, sub-TLV
+   types 128 through 255 have the mandatory bit set.  This bit indicates
+   how to handle unknown sub-TLVs.  If the mandatory bit is not set,
+   then an unknown sub-TLV MUST be silently ignored, and the rest of the
+   TLV is processed normally.  If the mandatory bit is set, then the
+   whole enclosing TLV MUST be silently ignored (except for updating the
+   parser state by a Router-Id, Next Hop, or Update TLV, as described in
+   the next section).
+Pad1
+    0 1 2 3 4 5 6 7
+   +-+-+-+-+-+-+-+-+
+   |   Type = 0    |
+   +-+-+-+-+-+-+-+-+
+   Fields:
+   Type      Set to 0 to indicate a Pad1 sub-TLV.
+   This sub-TLV is silently ignored on reception.  It is allowed within
+   any TLV that allows sub-TLVs.
+PadN
+    0                   1                   2                   3
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |    Type = 1   |    Length     |      MBZ...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+   Fields:
+   Type      Set to 1 to indicate a PadN sub-TLV.
+   Length    The length of the body in octets, exclusive of the Type and
+             Length fields.
+   MBZ       Must be zero, set to 0 on transmission.
+   This sub-TLV is silently ignored on reception.  It is allowed within
+   any TLV that allows sub-TLVs.
+
+#### Expected output:
+typedef struct _Zero {
+  UINT8BE data{data == 0};
+} Zero;
+
+casetype _Payload (UINT8BE Type) {
+  switch(Type) {
+    case 0:  
+        unit    Empty;
+    case 1: 
+        struct {
+            UINT8BE length;
+            Zero MBZ[:byte-size length];
+        } PadN;
+  }
+} Payload;
+
+entrypoint typedef struct _SubTLV {
+  UINT8BE Type;
+  Payload(Type) payload;
+} SubTLV;
+
+Example 3:
+
+4.6.5. Hello
+
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|    Type = 4   |    Length     |            Flags              |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|            Seqno              |          Interval             |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+This TLV is used for neighbour discovery and for determining a neighbour's reception cost.
+
+Fields:
+
+Type
+Set to 4 to indicate a Hello TLV.
+Length
+The length of the body in octets, exclusive of the Type and Length fields.
+Flags
+The individual bits of this field specify special handling of this TLV (see below).
+Seqno
+If the Unicast flag is set, this is the value of the sending node's outgoing Unicast Hello seqno for this neighbour. Otherwise, it is the sending node's outgoing Multicast Hello seqno for this interface.
+Interval
+If nonzero, this is an upper bound, expressed in centiseconds, on the time after which the sending node will send a new scheduled Hello TLV with the same setting of the Unicast flag. If this is 0, then this Hello represents an unscheduled Hello and doesn't carry any new information about times at which Hellos are sent.
+The Flags field is interpreted as follows:
+
+ 0                   1
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|U|X|X|X|X|X|X|X|X|X|X|X|X|X|X|X|
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+U (Unicast) flag (8000 hexadecimal):
+if set, then this Hello represents a Unicast Hello, otherwise it represents a Multicast Hello;
+X:
+all other bits MUST be sent as 0 and silently ignored on reception.
+Every time a Hello is sent, the corresponding seqno counter MUST be incremented. Since there is a single seqno counter for all the Multicast Hellos sent by a given node over a given interface, if the Unicast flag is not set, this TLV MUST be sent to all neighbours on this link, which can be achieved by sending to a multicast destination or by sending multiple packets to the unicast addresses of all reachable neighbours. Conversely, if the Unicast flag is set, this TLV MUST be sent to a single neighbour, which can achieved by sending to a unicast destination. In order to avoid large discontinuities in link quality, multiple Hello TLVs SHOULD NOT be sent in the same packet.
+
+This TLV is self-terminating and allows sub-TLVs.
+
+#### Expected output:
+// since flags can be divided further into one UnicastFlag and fifteen x, use the most detailed structure, and be careful about the bit number
+// Define the TLV structure for the Hello message
+// This TLV allows subtlv, placeholder
+typedef struct _SubTLV{
+  UINT8BE byte;
+} SubTLV; //placeholder
+
+entrypoint typedef struct _HelloTLV{
+  UINT8BE Type { Type == 4 }; // Type field, must be 4 for Hello TLV
+  UINT8BE Length {Length >= 6}; // Length of the body in octets (excluding Type and Length fields)
+  UINT16BE UnicastFlag: 1 { UnicastFlag == 0 || UnicastFlag == 1 };
+  UINT16BE x1:1 { x1 == 0 }; 
+  UINT16BE x2:1 { x2 == 0 }; 
+  UINT16BE x3:1 { x3 == 0 }; 
+  UINT16BE x4:1 { x4 == 0 }; 
+  UINT16BE x5:1 { x5 == 0 }; 
+  UINT16BE x6:1 { x6 == 0 }; 
+  UINT16BE x7:1 { x7 == 0 }; 
+  UINT16BE x8:1 { x8 == 0 }; 
+  UINT16BE x9:1 { x9 == 0 }; 
+  UINT16BE x10:1 { x10 == 0 }; 
+  UINT16BE x11:1 { x11 == 0 }; 
+  UINT16BE x12:1 { x12 == 0 }; 
+  UINT16BE x13:1 { x13 == 0 }; 
+  UINT16BE x14:1 { x14 == 0 }; 
+  UINT16BE x15:1 { x15 == 0 }; 
+  UINT16BE Seqno; // its size is specified by the table figure
+  UINT16BE Interval; // its size is specified by the table figure
+  SubTLV subtlvs[:byte-size Length - 6]; //This TLV allows sub-TLVs.
+
+} HelloTLV;
+
+
+
+!!!note! Be careful about the byte size of each field, for example, below is 64 bytes(UINT64BE)
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                                                               |
++                                                               +
+|                                                               |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+but this is 32 bytes(UINT32BE):
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                                                               |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+

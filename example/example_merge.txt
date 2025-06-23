@@ -1,0 +1,80 @@
+***** Example 1 *****
+
+##### Given three formats:
+This section describes the Pad1 and PadN sub-TLVs, used for padding within TLVs, with Pad1 set to 0 and PadN set to 1, both being silently ignored on reception and allowed within any TLV that allows sub-TLVs.
+entrypoint typedef struct _SubTLV {
+  UINT8BE Type;
+  UINT8BE length;
+  UINT8BE body[:byte-size length];
+} SubTLV;
+
+This section describes a Pad1 sub-TLV, which is set to 0 to indicate its type and is silently ignored on reception, being allowed within any TLV that allows sub-TLVs.
+entrypoint typedef struct _Pad1 {
+  UINT8BE Type { Type == 0 };
+} Pad1;
+
+This section describes the PadN sub-TLV, which is indicated by setting Type to 1 and includes fields for Length and MBZ, with the MBZ field required to be zero on transmission and the sub-TLV being silently ignored on reception, allowed within any TLV that allows sub-TLVs.
+entrypoint typedef struct _PadN {
+  UINT8BE Type { Type == 1 };
+  UINT8BE length;
+  UINT8BE MBZ[:byte-size length];
+} PadN;
+
+##### Expected output:
+
+// Pad1 and PadN are different kinds of SubTLV, should use casetype, please don't add default casetype for Payload
+//*** do not include Type again while defining each case struct in Payload 
+casetype _Payload (UINT8BE Type) {
+  switch(Type) {
+    case 0:  
+        unit    Empty;
+    case 1: 
+        struct {
+                UINT8BE length;
+                UINT8BE MBZ[:byte-size length];
+        } PadN;
+  }
+} Payload;
+
+entrypoint typedef struct _SubTLV {
+  UINT8BE Type;
+  Payload(Type) payload;
+} SubTLV;
+
+***** Example 2 *****
+
+##### Given two formats:
+
+This section describes the packet format of a Babel packet, which consists of a 4-octet header followed by a sequence of TLVs as the packet body, and optionally followed by a second sequence of TLVs as the packet trailer, designed to be extensible with specific considerations outlined in Appendix D.
+entrypoint typedef struct _BabelPacket {
+  UINT8BE Magic { Magic == 42 }; // Magic value must be 42
+  UINT8BE Version { Version == 2 }; // Version must be 2
+  UINT16BE BodyLength; // Length of the body in octets
+  UINT8BE PacketBody[:byte-size BodyLength]; // Packet body, size determined by BodyLength
+  UINT8BE PacketTrailer[:byte-size 0]; // Packet trailer, fixed size
+} BabelPacket;
+
+This section describes the structure of TLVs (Type-Length-Value) in a network protocol, where all TLVs, except for Pad1, consist of a Type field, a Length field, and a Payload field.
+
+entrypoint typedef struct _TLV {
+UINT8BE Type;
+UINT8BE length;
+UINT8BE payload[:byte-size length];
+} TLV;
+
+##### Expected output:
+//PacketBody and PacketTrailer are sequence of TLVs. Only use entrypoint for the highest level struct.
+
+typedef struct _TLV {
+UINT8BE Type;
+UINT8BE length;
+UINT8BE payload[:byte-size length];
+} TLV;
+
+entrypoint typedef struct _BabelPacket {
+  UINT8BE Magic { Magic == 42 }; // Magic value must be 42
+  UINT8BE Version { Version == 2 }; // Version must be 2
+  UINT16BE BodyLength; // Length of the body in octets
+  TLV PacketBody[:byte-size BodyLength]; // Packet body, size determined by BodyLength
+  TLV PacketTrailer[:byte-size 0]; // Packet trailer, fixed size
+} BabelPacket;
