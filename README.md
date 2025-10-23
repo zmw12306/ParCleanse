@@ -34,3 +34,7 @@ ParCleanse/
 ├── src/                   # Core logic: parsing, validation, refinement
 └── README.md              # This file
 ```
+
+## License
+
+This project is licensed under [Purdue license](LICENSE).
